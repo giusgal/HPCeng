@@ -1,4 +1,4 @@
-BIN_DIR=../bin
+BIN_DIR=.
 PROGRAM=$(BIN_DIR)/mergesort-co
 
 CC=g++
@@ -10,8 +10,8 @@ all: $(PROGRAM)
 $(PROGRAM): mergesort.cpp
 	$(CC) $(CFLAGS) $(VERBOSE) -o $@ $^ $(LDFLAGS)
 
-$(BIN_DIR): 
-	mkdir $@
+#$(BIN_DIR): 
+#	mkdir $@
 
 clean:
 	rm -rf $(PROGRAM) *.o
