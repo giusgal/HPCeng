@@ -118,11 +118,23 @@ void MsParallel_(int *array, int *tmp, bool inplace, long begin, long end, long 
     if (begin < (end - 1)) {
         const long half = (begin + end) / 2;
         // Create a task to be executed by an available thread
-        // If size(subarray) < depth => no more tasks will be created
-        #pragma omp task firstprivate(inplace, begin, half) final((end-1)-begin < depth)
-        {
-            MsParallel_(array, tmp, !inplace, begin, half, depth);
+        // If size(subarray) <= depth => all the tasks constructs encountered
+        //  by this final task(thread) will be executed directly by this thread
+        #pragma omp task firstprivate(inplace, begin, half) final((end-1)-begin <= depth)
+        MsParallel_(array, tmp, !inplace, begin, half, depth);
+        
+        // 1
+        /*
+        if((end-1)-begin < depth) {
+            MsParallel_(array, tmp, !inplace, begin, half, depth+1);
+        } else {
+            #pragma omp task firstprivate(inplace, begin, half)
+            {
+                MsParallel_(array, tmp, !inplace, begin, half, depth+1);
+            }
         }
+        */
+
         // Start executing another MsParellel_ instance as soon as
         //  the previous task is created.
         MsParallel_(array, tmp, !inplace, half, end, depth);
