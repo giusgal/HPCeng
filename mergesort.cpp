@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <omp.h>
 
 #include <iostream>
 #include <algorithm>
@@ -40,7 +41,7 @@
 /**
   * helper routine: check if array is sorted correctly
   */
-bool isSorted(int ref[], int data[], const size_t size){
+bool isSorted(int ref[], int data[], const size_t size) {
     std::sort(ref, ref + size);
     for (size_t idx = 0; idx < size; ++idx){
         if (ref[idx] != data[idx]) {
@@ -86,11 +87,11 @@ void MsMergeSequential(int *out, int *in, long begin1, long end1, long begin2, l
 
 
 /**
-  * sequential MergeSort
+  * Sequential MergeSort
   */
-// TODO: remember one additional parameter (depth)
-// TODO: recursive calls could be taskyfied
-// TODO: task synchronization also is required
+// OK: remember one additional parameter (depth)
+// OK: recursive calls could be taskyfied
+// OK: task synchronization also is required
 void MsSequential(int *array, int *tmp, bool inplace, long begin, long end) {
     if (begin < (end - 1)) {
         const long half = (begin + end) / 2;
@@ -106,17 +107,70 @@ void MsSequential(int *array, int *tmp, bool inplace, long begin, long end) {
     }
 }
 
+/*
+ * Parallel MergeSort
+ * */
+void MsParallel_(int *array, int *tmp, bool inplace, long begin, long end, long depth) {
+    // When the sub-arrays are "small enough" don't create more tasks,
+    //  instead, sort the subarrays using a single thread
+    //  => less overhead
+
+    if (begin < (end - 1)) {
+        const long half = (begin + end) / 2;
+        // Create a task to be executed by an available thread
+        // If size(subarray) < depth => no more tasks will be created
+        #pragma omp task firstprivate(inplace, begin, half) final((end-1)-begin < depth)
+        {
+            MsParallel_(array, tmp, !inplace, begin, half, depth);
+        }
+        // Start executing another MsParellel_ instance as soon as
+        //  the previous task is created.
+        MsParallel_(array, tmp, !inplace, half, end, depth);
+
+        // Wait for the previous task to complete execution
+        #pragma omp taskwait
+
+        // Merge the 2 ordered sub-arrays into a single array
+        if (inplace) {
+            MsMergeSequential(array, tmp, begin, half, half, end, begin);
+        } else {
+            MsMergeSequential(tmp, array, begin, half, half, end, begin);
+        }
+    } else if (!inplace) {
+        tmp[begin] = array[begin];
+    }
+}
+
+
 
 /**
   * Serial MergeSort
   */
-// TODO: this function should create the parallel region
-// TODO: good point to compute a good depth level (cut-off)
+// OK: this function should create the parallel region
+// OK: good point to compute a good depth level (cut-off)
 void MsSerial(int *array, int *tmp, const size_t size) {
 
-    // TODO: parallel version of MsSequential will receive one more parameter: 'depth' (used as cut-off)
+    // OK: parallel version of MsSequential will receive one more parameter: 'depth' (used as cut-off)
     MsSequential(array, tmp, true, 0, size);
 }
+
+/*
+ * Parallel MergeSort
+ * */
+void MsParallel(int *array, int *tmp, const size_t size) {
+    #pragma omp parallel
+    {
+        #pragma omp single
+        {
+            // Compute a depth level based on the number of available threads
+            //  and the dimension of the array
+            long depth = size / omp_get_num_threads();
+
+            MsParallel_(array, tmp, true, 0, size, depth);
+        }
+    }
+}
+
 
 
 /** 
@@ -141,6 +195,7 @@ int main(int argc, char* argv[]) {
 
         printf("Initialization...\n");
 
+        // Initialize "data" with random values
         srand(95);
         for (size_t idx = 0; idx < stSize; ++idx){
             data[idx] = (int) (stSize * (double(rand()) / RAND_MAX));
@@ -151,13 +206,15 @@ int main(int argc, char* argv[]) {
         printf("Sorting %zu elements of type int (%f MiB)...\n", stSize, dSize);
 
         gettimeofday(&t1, NULL);
-        MsSerial(data, tmp, stSize);
+        // MsSerial(data, tmp, stSize);
+        MsParallel(data, tmp, stSize);
         gettimeofday(&t2, NULL);
 
         etime = (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec) / 1000;
         etime = etime / 1000;
 
-        printf("done, took %f sec. Verification...", etime);
+        printf("Time: %f\n", etime);
+        printf("Verification... ");
         if (isSorted(ref, data, stSize)) {
             printf(" successful.\n");
         }
