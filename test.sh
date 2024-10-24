@@ -13,7 +13,7 @@ output_file=$2
 # Initialize CSV file with headers
 echo "Input Size,Time (s)" > $output_file
 
-for input_size in $((10**4)) $((10**5)) $((10**6)) $((10**7)) $((10**8))
+for input_size in $((10**5)) $((5*10**5)) $((10**6)) $((5*10**6)) $((10**7)) $((5*10**7)) $((10**8))
 do
   # Extract the time part using grep and awk
   time_taken=$(./$executable $input_size | grep "Time:" | awk '{print $2}')

@@ -75,8 +75,8 @@ long binarySearch(int *a, int el, long begin, long end) {
 /**
   * sequential merge step (straight-forward implementation)
   */
-// TODO: cut-off could also apply here (extra parameter?)
-// TODO: optional: we can also break merge in two halves
+// OK: cut-off could also apply here (extra parameter?)
+// OK: optional: we can also break merge in two halves
 void MsMergeSequential(int *out, int *in, long begin1, long end1, long begin2, long end2, long outBegin) {
     long left = begin1;
     long right = begin2;
@@ -105,7 +105,32 @@ void MsMergeSequential(int *out, int *in, long begin1, long end1, long begin2, l
     }
 }
 
+/*
+ * Parallel merge step
+ * IDEA:
+ *  Let's say we have two sorted sub-arrays to be merged:
+ *   A = |--------|, B = |--------|
+ *
+ *  The sequential version of the merge algorithm is inherently sequential, so the idea here is to
+ *  divide the "A" array into two parts:
+ *   A = |--------|, B = |--------|
+ *           ^pivot1
+ *
+ *  After this, a binary search is performed on the "B" array in order to find the smallest element "P"
+ *  of this array which is greater than A[pivot1]:
+ *   A = |--------|, B = |--------|
+ *           ^pivot1        ^pivot2
+ * 
+ *  So, we know that:
+ *   1. A[i<pivot1] <= A[pivot1] < B[pivot2] <= B[i>pivot2]
+ *   2. B[i<pivot2] < B[pivot2]
+ *  Therefore:
+ *   A[i<pivot1] and B[i<pivot2] can be merged in parallel
+ *   A[i>pivot1] and B[i>pivot2] can be merged in parallel
+ * */
 void MsMergeParallel(int *out, int *in, long begin1, long end1, long begin2, long end2, long outBegin) {
+    // If the total dimension of the 2 arrays to merge is "small enough"
+    //  => use the sequential version
     if((end1-begin1) + (end2-begin2) <= CUT_OFF) {
         MsMergeSequential(out, in, begin1, end1, begin2, end2, outBegin);
     } else {
@@ -202,7 +227,6 @@ void MsParallel(int *array, int *tmp, const size_t size) {
         #pragma omp single
         {
             // Compute a depth level based on the number of available threads
-            //  and the dimension of the array
             long depth = std::log2(omp_get_num_threads());
 
             MsParallel_(array, tmp, true, 0, size, depth);
@@ -235,6 +259,7 @@ int main(int argc, char* argv[]) {
         printf("Initialization...\n");
 
         // Initialize "data" with random values
+        // srand(time(NULL));
         srand(95);
         for (size_t idx = 0; idx < stSize; ++idx){
             data[idx] = (int) (stSize * (double(rand()) / RAND_MAX));
