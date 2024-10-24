@@ -36,7 +36,7 @@
 #include <ctime>
 #include <cstring>
 
-
+#define CUT_OFF 1000000
 
 /**
   * helper routine: check if array is sorted correctly
@@ -51,6 +51,26 @@ bool isSorted(int ref[], int data[], const size_t size) {
     return true;
 }
 
+
+/*
+ * helper routine: "lower bound" binary search
+ * */
+long binarySearch(int *a, int el, long begin, long end) {
+    long s = begin;
+    long e = end;
+
+    while(s <= (e-1)) {
+        long pivot = (s+e)/2;
+
+        if(el < a[pivot]) {
+            e = pivot;
+        } else {
+            s = pivot+1;
+        }
+    }
+    
+    return s;
+}
 
 /**
   * sequential merge step (straight-forward implementation)
@@ -85,6 +105,22 @@ void MsMergeSequential(int *out, int *in, long begin1, long end1, long begin2, l
     }
 }
 
+void MsMergeParallel(int *out, int *in, long begin1, long end1, long begin2, long end2, long outBegin) {
+    if((end1-begin1) + (end2-begin2) <= CUT_OFF) {
+        MsMergeSequential(out, in, begin1, end1, begin2, end2, outBegin);
+    } else {
+        long pivot1 = begin1+(end1-begin1)/2;
+        long pivot2 = binarySearch(in, in[pivot1], begin2, end2);
+        long pivot3 = outBegin+(pivot1-begin1)+(pivot2-begin2);
+
+        #pragma omp task firstprivate(begin1, pivot1, begin2, pivot2, outBegin)
+        MsMergeParallel(out, in, begin1, pivot1, begin2, pivot2, outBegin);
+
+        MsMergeParallel(out, in, pivot1, end1, pivot2, end2, pivot3);
+
+        #pragma omp taskwait
+    }
+}
 
 /**
   * Sequential MergeSort
@@ -132,9 +168,11 @@ void MsParallel_(int *array, int *tmp, bool inplace, long begin, long end, long 
 
             // Merge the 2 ordered sub-arrays into a single array
             if (inplace) {
-                MsMergeSequential(array, tmp, begin, half, half, end, begin);
+                // MsMergeSequential(array, tmp, begin, half, half, end, begin);
+                MsMergeParallel(array, tmp, begin, half, half, end, begin);
             } else {
-                MsMergeSequential(tmp, array, begin, half, half, end, begin);
+                // MsMergeSequential(tmp, array, begin, half, half, end, begin);
+                MsMergeParallel(tmp, array, begin, half, half, end, begin);
             }
         } else if (!inplace) {
             tmp[begin] = array[begin];
