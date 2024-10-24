@@ -112,44 +112,33 @@ void MsSequential(int *array, int *tmp, bool inplace, long begin, long end) {
  * */
 void MsParallel_(int *array, int *tmp, bool inplace, long begin, long end, long depth) {
     // When the sub-arrays are "small enough" don't create more tasks,
-    //  instead, sort the subarrays using a single thread
+    //  instead, use the sequential mergesort
     //  => less overhead
+    if(depth <= 0) {
+        MsSequential(array, tmp, inplace, begin, end);
+    } else {
+        if (begin < (end - 1)) {
+            const long half = (begin + end) / 2;
+            // Create a task to be executed by an available thread
+            #pragma omp task firstprivate(inplace, begin, half, depth)
+            MsParallel_(array, tmp, !inplace, begin, half, depth-1);
 
-    if (begin < (end - 1)) {
-        const long half = (begin + end) / 2;
-        // Create a task to be executed by an available thread
-        // If size(subarray) <= depth => all the tasks constructs encountered
-        //  by this final task(thread) will be executed directly by this thread
-        #pragma omp task firstprivate(inplace, begin, half) final((end-1)-begin <= depth)
-        MsParallel_(array, tmp, !inplace, begin, half, depth);
-        
-        // 1
-        /*
-        if((end-1)-begin < depth) {
-            MsParallel_(array, tmp, !inplace, begin, half, depth+1);
-        } else {
-            #pragma omp task firstprivate(inplace, begin, half)
-            {
-                MsParallel_(array, tmp, !inplace, begin, half, depth+1);
+            // Start executing another MsParellel_ instance as soon as
+            //  the previous task is created.
+            MsParallel_(array, tmp, !inplace, half, end, depth-1);
+
+            // Wait for the previous task to complete execution
+            #pragma omp taskwait
+
+            // Merge the 2 ordered sub-arrays into a single array
+            if (inplace) {
+                MsMergeSequential(array, tmp, begin, half, half, end, begin);
+            } else {
+                MsMergeSequential(tmp, array, begin, half, half, end, begin);
             }
+        } else if (!inplace) {
+            tmp[begin] = array[begin];
         }
-        */
-
-        // Start executing another MsParellel_ instance as soon as
-        //  the previous task is created.
-        MsParallel_(array, tmp, !inplace, half, end, depth);
-
-        // Wait for the previous task to complete execution
-        #pragma omp taskwait
-
-        // Merge the 2 ordered sub-arrays into a single array
-        if (inplace) {
-            MsMergeSequential(array, tmp, begin, half, half, end, begin);
-        } else {
-            MsMergeSequential(tmp, array, begin, half, half, end, begin);
-        }
-    } else if (!inplace) {
-        tmp[begin] = array[begin];
     }
 }
 
@@ -176,7 +165,7 @@ void MsParallel(int *array, int *tmp, const size_t size) {
         {
             // Compute a depth level based on the number of available threads
             //  and the dimension of the array
-            long depth = size / omp_get_num_threads();
+            long depth = std::log2(omp_get_num_threads());
 
             MsParallel_(array, tmp, true, 0, size, depth);
         }
