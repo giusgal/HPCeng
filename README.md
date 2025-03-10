@@ -1,2 +1,2 @@
-# Parallel Computing challenge 1
-Parallel mergesort
+# HPCeng
+HPC-Engineering university projects
