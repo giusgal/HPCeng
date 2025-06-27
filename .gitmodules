@@ -1,0 +1,3 @@
+[submodule "AdvancedMethodsForScientificComputing/autodiff"]
+	path = AdvancedMethodsForScientificComputing/autodiff
+	url = git@github.com:giusgal/autodiff.git
